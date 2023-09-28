@@ -4,7 +4,9 @@ import glob
 import re
 import warnings
 import gc
+
 from pathlib import PurePath
+from tqdm import tqdm
 
 from astropy import units as u
 from astropy.nddata import CCDData
@@ -83,7 +85,7 @@ for folder in subfolders:
 
     print("Sorting data from " + base_path)
 
-    for file in files:
+    for file in tqdm(files, desc="Sorting data from " + base_path):
         filepath = PurePath(file)
         classified = False
         if useexisting:
@@ -149,8 +151,7 @@ for folder in subfolders:
         master_dark = CCDData.read(masters.get("master_dark"),unit="adu")
         print("Master dark already exists for " + base_path)
     else:
-        print("Debiasing darks for " + base_path)
-        for dark in darks: # Need to try considering different exposure times and making master darks for each exposure time if there are multiple
+        for dark in tqdm(darks, desc = "Debiasing darks for " + base_path): # Need to try considering different exposure times and making master darks for each exposure time if there are multiple
             name = PurePath(dark).name
             ccd = CCDData.read(dark,unit="adu")
             ccd = ccdp.subtract_bias(ccd,master_bias)
@@ -175,14 +176,12 @@ for folder in subfolders:
             master_flat = CCDData.read(masters.get("master_flat_"+filt),unit="adu")
             print("Master flat already exists for filter " + filt + " in " + base_path)
         else:
-            print("Calibrating flats for filter " + filt + " in " + base_path)
-            for flat in flats[filt]:
+            for flat in tqdm(flats[filt], desc = "Calibrating flats for filter " + filt + " in " + base_path):
                 name = PurePath(flat).name
                 ccd = CCDData.read(flat,unit="adu")
                 ccd.data = ccd.data.astype("float32")
                 ccd = ccdp.subtract_bias(ccd,master_bias)
                 ccd = ccdp.subtract_dark(ccd,master_dark,exposure_time="EXPTIME",exposure_unit=u.second,scale=True)
-                ccd.data = ccd.data.astype("float32")
                 ccd.write(out_path + "\\intermediate\\calibratedflat-"+filt+"_"+name+".fit",overwrite=True)
             cflats = glob.glob(out_path + "\\intermediate\\calibratedflat-"+filt+"_*.fit")
             print(str(len(cflats)) + " flats calibrated.")
@@ -198,19 +197,17 @@ for folder in subfolders:
 
     for obj in science.keys():
         for filt in science[obj].keys():
-            print("Calibrating frames of " + obj + " for filter " + filt + " in " + base_path)
             path = os.path.join(out_path,"calibrated_science",obj,filt)
             os.makedirs(path, exist_ok = True)
             master_flat = CCDData.read(out_path + "\\masters\\master_flat_"+filt+".fit", unit="adu")
             master_flat.data = master_flat.data.astype("float32")
-            for frame in science[obj][filt]:
+            for frame in tqdm(science[obj][filt], desc="Calibrating frames of " + obj + " for filter " + filt + " in " + base_path):
                 name = PurePath(frame).name
                 ccd = CCDData.read(frame,unit="adu")
                 ccd.data = ccd.data.astype("float32")
                 ccd = ccdp.subtract_bias(ccd,master_bias)
                 ccd = ccdp.subtract_dark(ccd,master_dark,exposure_time="EXPTIME",exposure_unit=u.second,scale=True)
                 ccd = ccdp.flat_correct(ccd,master_flat)
-                ccd.data = ccd.data.astype("float32")
                 ccd.uncertainty = None
                 ccd.mask = None
                 ccd.write(path + "\\calibrated_"+name+".fit",overwrite=True)
@@ -229,7 +226,6 @@ for folder in subfolders:
                 ccd = ccdp.subtract_bias(ccd,master_bias)
                 ccd = ccdp.subtract_dark(ccd,master_dark,exposure_time="EXPTIME",exposure_unit=u.second,scale=True)
                 ccd = ccdp.flat_correct(ccd,master_flat)
-                ccd.data = ccd.data.astype("float32")
                 ccd.write(path + "\\calibrated_"+name+".fit",overwrite=True)
             print(str(len(standards[obj][filt])) + " frames calibrated.")
     
